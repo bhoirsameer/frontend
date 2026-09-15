@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Söhne:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --chatgpt-bg: #ffffff;
+  --chatgpt-sidebar-bg: #f9f9f9;
+  --chatgpt-sidebar-hover: #ececec;
+  --chatgpt-input-bg: #ffffff;
+  --chatgpt-user-msg-bg: #f4f4f4;
+  --chatgpt-border: #e5e5e5;
+  --chatgpt-border-subtle: #f0f0f0;
+  
+  --chatgpt-text-primary: #0d0d0d;
+  --chatgpt-text-secondary: #676767;
+  --chatgpt-text-tertiary: #8e8e8e;
+  
+  --chatgpt-green: #10a37f;
+  --chatgpt-green-hover: #0e8e6f;
+  
+  --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-main);
+  background-color: var(--chatgpt-bg);
+  color: var(--chatgpt-text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ChatGPT Input Capsule */
+.chatgpt-input-capsule {
+  background-color: var(--chatgpt-input-bg);
+  border: 1px solid var(--chatgpt-border);
+  border-radius: 24px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04), 0 0 2px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.chatgpt-input-capsule:focus-within {
+  border-color: #c5c5c5;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* ChatGPT Prompt Card */
+.chatgpt-card {
+  border: 1px solid var(--chatgpt-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  text-align: left;
+}
+
+.chatgpt-card:hover {
+  background-color: #f9f9f9;
+  border-color: #d9d9d9;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b4b4b4;
+}
+
+/* Modal Backdrop */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modal-content {
+  animation: fadeIn 0.15s ease-out forwards;
+}
+
+/* Markdown Formatted Content Styles */
+.formatted-markdown-container .table-row-stripe:nth-child(even) {
+  background-color: #fafafa;
+}
+
+.formatted-markdown-container .table-row-stripe:hover {
+  background-color: #f0f7f5;
+}
+
+.formatted-markdown-container th:last-child,
+.formatted-markdown-container td:last-child {
+  border-right: none;
+}
+
