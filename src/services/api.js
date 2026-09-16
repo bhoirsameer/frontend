@@ -110,6 +110,82 @@ class ApiService {
     });
   }
 
+  // Streaming version of sendMessage: instead of resolving once with the full
+  // reply, it calls back as the reply is generated so the UI can render it
+  // token-by-token. Server-Sent Events, so parsed by hand rather than
+  // response.json() (fetch/EventSource don't support this natively here
+  // because we need a POST body and a custom X-Session-ID header).
+  async sendMessageStream(message, chatId, { onStart, onToken, onDone, onError } = {}) {
+    const url = `${this.baseUrl}/api/chat/stream`;
+    const headers = { 'Content-Type': 'application/json' };
+    if (this.sessionId) headers['X-Session-ID'] = this.sessionId;
+
+    let response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(chatId ? { message, chat_id: chatId } : { message })
+      });
+    } catch (err) {
+      onError && onError(err);
+      return;
+    }
+
+    // Keep session-id / rotation handling consistent with request().
+    const returnedSessionId = response.headers.get('X-Session-ID');
+    const wasRotated = response.headers.get('X-Session-Rotated') === 'true';
+    if (returnedSessionId && returnedSessionId !== this.sessionId) {
+      this.setSessionId(returnedSessionId);
+      if (wasRotated && this.onSessionRotatedCallback) {
+        this.onSessionRotatedCallback(returnedSessionId);
+      }
+    }
+
+    if (response.status === 401) {
+      this.setSessionId(null);
+      onError && onError(new Error('Session expired'));
+      return;
+    }
+
+    if (!response.ok || !response.body) {
+      const err = await response.json().catch(() => ({ detail: 'Request failed' }));
+      onError && onError(new Error(err.detail || 'Request failed'));
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE messages are separated by a blank line.
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+
+        let eventType = 'message';
+        let dataLine = '';
+        for (const line of rawEvent.split('\n')) {
+          if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+          else if (line.startsWith('data: ')) dataLine = line.slice(6);
+        }
+        if (!dataLine) continue;
+
+        const data = JSON.parse(dataLine);
+        if (eventType === 'start') onStart && onStart(data);
+        else if (eventType === 'token') onToken && onToken(data.content);
+        else if (eventType === 'error') onError && onError(new Error(data.detail));
+        else if (eventType === 'done') onDone && onDone(data);
+      }
+    }
+  }
+
   async getHistory(chatId = null) {
     const query = chatId ? `?chat_id=${encodeURIComponent(chatId)}` : '';
     return await this.request(`/api/history${query}`, { method: 'GET' });
@@ -119,9 +195,17 @@ class ApiService {
     return await this.request('/api/threads', { method: 'GET' });
   }
 
+  async deleteThread(chatId) {
+    return await this.request('/api/delete-thread', {
+      method: 'POST',
+      body: JSON.stringify({ chat_id: chatId })
+    });
+  }
+
   async testRotateSession() {
     return await this.request('/api/rotate-session-test', { method: 'POST' });
   }
 }
+
 
 export const api = new ApiService();
