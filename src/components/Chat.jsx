@@ -3,6 +3,7 @@ import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import ChatFeed from './ChatFeed';
 import InputBox from './InputBox';
+import WelcomeScreen from './WelcomeScreen';
 import SessionModal from './SessionModal';
 import { api } from '../services/api';
 import { CheckCircle2 } from 'lucide-react';
@@ -101,6 +102,19 @@ export default function Chat({ username, sessionInfo, rotationNotice, onLogout, 
     setMessages([]);
   };
 
+  const handleDeleteThread = async (chatIdToDelete) => {
+    if (!chatIdToDelete) return;
+    try {
+      await api.deleteThread(chatIdToDelete);
+      if (chatIdToDelete === activeChatId) {
+        handleNewChat();
+      }
+      await refreshThreads();
+    } catch (err) {
+      console.error('Error soft-deleting thread:', err);
+    }
+  };
+
   const refreshThreads = async (currentChatId) => {
     try {
       const res = await api.getThreads();
@@ -117,31 +131,44 @@ export default function Chat({ username, sessionInfo, rotationNotice, onLogout, 
     if (!msg.trim() || loading) return;
 
     const userMessage = { role: 'user', content: msg };
-    setMessages((prev) => [...prev, userMessage]);
+    // Empty placeholder that gets filled in token-by-token as the reply streams in.
+    const assistantMessage = { role: 'assistant', content: '' };
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setInput('');
     setLoading(true);
 
-    try {
-      const res = await api.sendMessage(msg, activeChatId);
-      const newChatId = res.chat_id || activeChatId;
+    const appendToAssistant = (piece) => {
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        next[next.length - 1] = { ...last, content: last.content + piece };
+        return next;
+      });
+    };
 
-      if (newChatId && newChatId !== activeChatId) {
-        setActiveChatId(newChatId);
-        updateUrlWithChatId(newChatId);
+    let streamedChatId = activeChatId;
+
+    await api.sendMessageStream(msg, activeChatId, {
+      onStart: ({ chat_id }) => {
+        streamedChatId = chat_id;
+        if (chat_id && chat_id !== activeChatId) {
+          setActiveChatId(chat_id);
+          updateUrlWithChatId(chat_id);
+        }
+      },
+      onToken: (piece) => {
+        appendToAssistant(piece);
+      },
+      onDone: async () => {
+        setLoading(false);
+        // Refresh sidebar threads list to reflect the new or updated chat
+        await refreshThreads(streamedChatId);
+      },
+      onError: (err) => {
+        appendToAssistant(`\n\nError: ${err.message || 'Failed to send'}`);
+        setLoading(false);
       }
-
-      setMessages((prev) => [...prev, { role: 'assistant', content: res.reply }]);
-      
-      // Refresh sidebar threads list to reflect the new or updated chat
-      await refreshThreads(newChatId);
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: `Error: ${err.message || 'Failed to send'}` }
-      ]);
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   return (
@@ -159,6 +186,7 @@ export default function Chat({ username, sessionInfo, rotationNotice, onLogout, 
         activeChatId={activeChatId}
         onSelectChat={handleSelectChat}
         onNewChat={handleNewChat}
+        onDeleteThread={handleDeleteThread}
         onOpenSessionModal={() => setSessionModalOpen(true)}
       />
 
@@ -172,10 +200,6 @@ export default function Chat({ username, sessionInfo, rotationNotice, onLogout, 
       }}>
         {/* Top Navbar */}
         <Navbar
-          username={username}
-          sessionId={sessionInfo.sessionId}
-          secondsUntilRotation={sessionInfo.secondsUntilRotation}
-          onLogout={onLogout}
           onOpenSessionModal={() => setSessionModalOpen(true)}
         />
 
@@ -203,21 +227,31 @@ export default function Chat({ username, sessionInfo, rotationNotice, onLogout, 
           </div>
         )}
 
-        {/* Chat Stream / Feed */}
-        <ChatFeed
-          messages={messages}
-          loading={loading}
-          onSend={handleSend}
-          endRef={endRef}
-        />
+        {messages.length === 0 ? (
+          <WelcomeScreen
+            input={input}
+            setInput={setInput}
+            onSend={handleSend}
+            loading={loading}
+          />
+        ) : (
+          <>
+            {/* Chat Stream / Feed */}
+            <ChatFeed
+              messages={messages}
+              loading={loading && messages[messages.length - 1]?.content === ''}
+              endRef={endRef}
+            />
 
-        {/* Input Capsule Box */}
-        <InputBox
-          input={input}
-          setInput={setInput}
-          onSend={() => handleSend()}
-          loading={loading}
-        />
+            {/* Input Capsule Box */}
+            <InputBox
+              input={input}
+              setInput={setInput}
+              onSend={() => handleSend()}
+              loading={loading}
+            />
+          </>
+        )}
       </div>
 
       {/* Session Details Settings Modal */}
@@ -227,6 +261,7 @@ export default function Chat({ username, sessionInfo, rotationNotice, onLogout, 
         sessionId={sessionInfo.sessionId}
         secondsUntilRotation={sessionInfo.secondsUntilRotation}
         onTestRotate={onTestRotate}
+        onLogout={onLogout}
       />
     </div>
   );
